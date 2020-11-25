@@ -26,9 +26,13 @@ x_vars = {(i): OP.binary_var(name="x_{0}".format(i)) for i in set_V}
 # add constraints
 OP.add_constraint(OP.sum(x_vars[i] for i in set_V) <= Nmax)
 OP.add_constraint(OP.sum(x_vars[i] for i in set_V) >= Nmin)
-constraint3 = {i: OP.add_constraint(OP.sum(x_vars[i] + x_vars[j] for j in set_E[i]) <= 1)}
 
-print(set_E[0])
+# iteravily add geometric constraints
+for cnt in range(0,n):
+    for el in set_E[cnt]:
+        OP.add_constraint(x_vars[cnt] + x_vars[el] <= 1)
+
+
 # create objective
 obj = OP.sum(P(i)*x_vars[i] for i in set_V)
 

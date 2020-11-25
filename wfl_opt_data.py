@@ -19,7 +19,7 @@ grid  = []          # empty grid knodes
 set_V = range(0,n)  # enumerate decsion variables
 set_E = []          # store not allower area for each node
 Nmin  = 1           # minimal number of turbines
-Nmax  = 25          # maximal number of turbines
+Nmax  = 50          # maximal number of turbines
 Dmin  = 2           # minimum distance between turbines
 
 # --------------------------
@@ -52,14 +52,9 @@ def plot_grid(grid):
 # ---------------
 # NODE GENERATION
 # ---------------
-# generate n radnom nodes in x,y
-
-#random.seed(3)
-#for i in range(0,n):
-#    grid.append([random.randint(0,xAxis), random.randint(0,yAxis)] )
-for i in range(0,xAxis):
-    for j in range(0,yAxis):
-        grid.append([i,j])
+for ii in range(0,xAxis):
+    for jj in range(0,yAxis):
+        grid.append([ii,jj])
 
 # generate the set E_i
 for l in range(0,n):
@@ -67,3 +62,4 @@ for l in range(0,n):
     for k in range(0,n):
         if dist(grid[l], grid[k]) <= Dmin:
             set_E[l].append(k)
+    set_E[l].remove(l)
