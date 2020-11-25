@@ -59,7 +59,7 @@ for ii in range(0,xAxis):
 
 # generate the set E_i
 # elements of each subset are indexes of the set_V that are in
-# a distance of Dmin around the index i
+# a distance of Dmin around turbine i
 for l in range(0,n):
     set_E.append([])
     for k in range(0,n):
