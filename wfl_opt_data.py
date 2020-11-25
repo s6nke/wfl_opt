@@ -20,7 +20,7 @@ set_V = range(0,n)  # enumerate decsion variables
 set_E = []          # store not allower area for each node
 Nmin  = 1           # minimal number of turbines
 Nmax  = 50          # maximal number of turbines
-Dmin  = 2           # minimum distance between turbines
+Dmin  = 1           # minimum distance between turbines
 
 # --------------------------
 # POWER FUNCTION OF TURBINES
@@ -44,7 +44,7 @@ def dist(node1, node2):
 # --------
 def plot_grid(grid):
     for i in range(0,n):
-        plt.scatter(grid[i][0], grid[i][1])
+        plt.scatter(grid[i][0], grid[i][1], s=10, c="black")
         plt.text(grid[i][0], grid[i][1], "{0}".format(i))
     return None
 
@@ -52,11 +52,14 @@ def plot_grid(grid):
 # ---------------
 # NODE GENERATION
 # ---------------
+# generate list of (x,y)-coordinates
 for ii in range(0,xAxis):
     for jj in range(0,yAxis):
         grid.append([ii,jj])
 
 # generate the set E_i
+# elements of each subset are indexes of the set_V that are in
+# a distance of Dmin around the index i
 for l in range(0,n):
     set_E.append([])
     for k in range(0,n):
