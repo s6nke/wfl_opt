@@ -61,3 +61,5 @@ for i in range(0, grid.shape[0]):
         else:
             infer.append(0)
     interferenz_matrix[i] = np.array(infer).reshape((xAxis, yAxis))
+
+print(interferenz_matrix[0])
