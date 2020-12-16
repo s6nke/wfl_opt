@@ -7,6 +7,7 @@
 # - verify optimality
 # - include cable-routing problem
 # - make some comments
+# - update calc of setE to i > j if correct
 # 
 # ----------------
 # LIST OF METHODS:
@@ -66,7 +67,7 @@ class wfl_environmet:
         for ii in range(0,self.axx):
             for jj in range(0,self.axy):
                 grid.append([ii,jj])
-        self.grid = np.array(grid)
+        self.grid = np.asarray(grid)
         print("Done!")
 
     def init_setE(self):
@@ -75,17 +76,25 @@ class wfl_environmet:
         # a distance of Dmin around turbine i
         print("Generate set E_i ....")
         set_E = []
+        not_set_E = []
         for l in range(0,self.n):
             # create empty sub-list
             set_E.append([])
+            not_set_E.append([])
             for k in range(0,self.n):
                 # check if the node is in Dmin to our node[l]
                 if self.dist(self.grid[l], self.grid[k]) <= self.Dmin:
                     # if too close add to set_E sublist
                     set_E[l].append(k)
+                else:
+                    not_set_E[l].append(k)
             # remove the node itself from the set to prevent false addition if set true
-            set_E[l].remove(l)
-        self.setE = np.array(set_E)
+            try:
+                set_E[l].remove(l)
+            except:
+                not_set_E[l].remove(l)
+        self.setE = np.array(set_E, dtype=object)
+        self.not_setE = np.array(not_set_E, dtype=object)
         print("Done!")
 
     def init_interference_matrix(self):
@@ -100,11 +109,13 @@ class wfl_environmet:
             print("Done!")
 
     def warmstart(self, OP, x_vars, Nmin, Nmax):
+        print("Initialise warmstart ...")
         self.find_initial_sol(Nmin, Nmax)
         warmstart = OP.new_solution()
         for el in self.initial_sol:
             warmstart.add_var_value(x_vars[el], el)
         OP.add_mip_start(warmstart)
+        print("Done!")
 
     # calculate kartesian difference of two grid nodes
     def dist(self, node1, node2):
