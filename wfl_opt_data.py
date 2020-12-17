@@ -32,7 +32,7 @@
 # ------------
 # DEPENDENCIES
 # ------------
-import random
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import docplex.mp.model as cpx  
@@ -49,6 +49,10 @@ class wf_environment:
         # init calculations
         self.setV = range(0, self.n)
         self.init_grid()
+
+        # relative path init
+        self.dir = os.path.dirname(__file__)
+        self.dir_sol = os.path.join(self.dir, "solutions")
 
     def init_grid(self):
         # construct grid nodes for geometry of the ares
@@ -68,7 +72,7 @@ class wf_environment:
     def load_layout_sol(self):
         filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
         try:
-            with open(filename, "rb") as sol_file:
+            with open(os.path.join(self.dir_sol,filename), "rb") as sol_file:
                 self.layout_sol = np.load(sol_file)
                 self.layout_sol_index = np.load(sol_file)
         except:
@@ -134,7 +138,8 @@ class layout_optimization(wf_environment):
     def init_interference_matrix(self):
         print("Open interference file ...")
         try:
-            with open("interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy", "rb") as infer_file:
+            filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy"
+            with open(os.path.join(self.dir_sol,filename), "rb") as infer_file:
                 self.infer_matrix = np.load(infer_file)
             print("Done!")
         except:
@@ -220,7 +225,7 @@ class layout_optimization(wf_environment):
     def save_interference(self, ifmxx):
         filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy" 
         print("Save interference matrix to " + filename)
-        with open(filename, "wb") as infer_file:
+        with open(os.path.join(self.dir_sol,filename), "wb") as infer_file:
             np.save(infer_file, ifmxx)
         print("Done!")
     
@@ -238,8 +243,8 @@ class layout_optimization(wf_environment):
         self.initial_sol = [OP_initial.solution.get_value(x_vars[element]) for element in self.setV]
 
     def save_sol(self):
-        filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
-        with open(filename, "wb") as sol_file:
+        filename = "../solutions/wfl_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        with open(os.path.join(self.dir_sol, filename), "wb") as sol_file:
             np.save(sol_file, self.sol)
             np.save(sol_file, self.sol_indexes)
 
@@ -266,14 +271,6 @@ class cable_routing_optimization(wf_environment):
                 if i!=j:
                     setA.append([i,j])
         self.setA = setA
-    
-    def calc_cost(self):
-        setC = []
-        for i in self.setV:
-            setC.append([])
-            for j in self.setV:
-                setC[i].append(self.dist(i,j))
-        self.setC = setC
 
     def cost(self,arc):
         node0 = self.grid[arc[0]]
@@ -290,9 +287,12 @@ class cable_routing_optimization(wf_environment):
             x1,y1 = self.grid[vec[1]]
             dx = x1-x0
             dy = y1-y0
-            print(vec, x0,y0,x1,y1)
-            print("Plot: ", x0,y0,dx,dy)
             plt.arrow(x0,y0,dx,dy)
+    
+    def save_sol(self):
+        filename = "cr_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        with open(os.path.join(self.dir_sol,filename), "wb") as sol_file:
+            np.save(sol_file, self.sol_arcs)
 
 # END OF CABLE ROUTING OPTIMIZATION
 # ###################################

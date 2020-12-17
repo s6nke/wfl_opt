@@ -20,8 +20,8 @@ import numpy as np                  # numpy package
 # ---------
 # VARIABLES AND LISTS
 # ---------
-xAxis = 5           # size of x axis in m
-yAxis = 5           # size of y axis in m
+xAxis = 20           # size of x axis in m
+yAxis = 20           # size of y axis in m
 Nmin  = 0            # minimal number of turbines
 Nmax  = 200           # maximal number of turbines
 Dmin  = 2            # minimum distance between turbines
