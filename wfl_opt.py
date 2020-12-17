@@ -20,8 +20,8 @@ import numpy as np                  # numpy package
 # ---------
 # VARIABLES AND LISTS
 # ---------
-xAxis = 20           # size of x axis in m
-yAxis = 20           # size of y axis in m
+xAxis = 5           # size of x axis in m
+yAxis = 5           # size of y axis in m
 Nmin  = 0            # minimal number of turbines
 Nmax  = 200           # maximal number of turbines
 Dmin  = 2            # minimum distance between turbines
@@ -33,7 +33,7 @@ w_dirs  = np.array([[1,1]])#, [0,1], [1,1], [-1,0], [-1,-1], [0,-1]])
 
 # -----------
 # Set the optimization environment
-OPenv = wfl_environmet(xAxis, yAxis, Dmin, k, V, D, v_wind, w_dirs)
+OPenv = layout_optimization(xAxis, yAxis, Dmin, k, V, D, v_wind, w_dirs)
 
 
 ##############
@@ -121,8 +121,17 @@ OP.solve()
 
 print("Number of turbines built: ", sum(x_vars[i].solution_value for i in OPenv.setV))
 OPenv.sol = [OP.solution.get_value(x_vars[element]) for element in OPenv.setV]
+#OPenv.sol_int = [OP.solution]
 
-print(OP.solution.objective_value)
+sol_indexes = []
+cnt = 0
+for element in OPenv.setV:
+    if OP.solution.get_value(x_vars[element]) == 1:
+        sol_indexes.append(cnt)
+    cnt += 1
+OPenv.sol_indexes = sol_indexes
+
+
 # ########
 # PLOTTING
 # ########

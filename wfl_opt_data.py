@@ -37,28 +37,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import docplex.mp.model as cpx  
 
-# ##############################
-# BEGIN OF WFL ENVIRONMENT CLASS
-
-class wfl_environmet:
-    def __init__(self, axx, axy, Dmin=5, k=0.05, V=15, D=1, v_wind=15, w_dirs=[1,1]):
+# ################################
+# BEGIN of optimization base class
+class wf_environment:
+    def __init__(self,axx,axy):
         # init variables
         self.axx = axx
         self.axy = axy
         self.n   = axx*axy
-        self.Dmin = Dmin
-        self.k = k
-        self.V = V
-        self.D = D
-        self.v_wind = v_wind
-        self.w_dirs  = w_dirs
 
         # init calculations
-        self.init_grid()
-        self.init_setE()
-        self.init_interference_matrix()
         self.setV = range(0, self.n)
-    
+        self.init_grid()
+
     def init_grid(self):
         # construct grid nodes for geometry of the ares
         # assigns self the grid numpy array
@@ -69,6 +60,49 @@ class wfl_environmet:
                 grid.append([ii,jj])
         self.grid = np.asarray(grid)
         print("Done!")
+
+    # calculate kartesian difference of two grid nodes
+    def dist(self, node1, node2):
+        return np.linalg.norm(node1-node2)
+   
+    def load_layout_sol(self):
+        filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        try:
+            with open(filename, "rb") as sol_file:
+                self.layout_sol = np.load(sol_file)
+                self.layout_sol_index = np.load(sol_file)
+        except:
+            print("No mathing file found!")
+
+    def plot_turbines(self, sr, col="white"):
+        for i in range(0, self.n):
+        # plot a red star on top of the grid node if the decsision variable is set 1
+        # also adds a Dmin-diameter circle around this point to show forbidden zones
+            if sr[i] == 1.0:
+                plt.scatter(self.grid[i][0], self.grid[i][1], s=100, c=col, marker="*")
+                #ax.add_artist(plt.Circle((grid[i][0], grid[i][1]), Dmin, alpha=0.1))
+
+# END of optimization base class
+# ##############################
+
+
+# ##############################
+# BEGIN OF WFL ENVIRONMENT CLASS
+
+class layout_optimization(wf_environment):
+    def __init__(self, axx, axy, Dmin=5, k=0.05, V=15, D=1, v_wind=15, w_dirs=[1,1]):
+        super().__init__(axx,axy)
+        self.Dmin = Dmin
+        self.k = k
+        self.V = V
+        self.D = D
+        self.v_wind = v_wind
+        self.w_dirs  = w_dirs
+
+        # init calculations
+        self.init_setE()
+        self.init_interference_matrix()
+
 
     def init_setE(self):
         # generate the set E_i
@@ -117,10 +151,6 @@ class wfl_environmet:
         OP.add_mip_start(warmstart)
         print("Done!")
 
-    # calculate kartesian difference of two grid nodes
-    def dist(self, node1, node2):
-        return np.linalg.norm(node1-node2)
-
     # plot grid nodes
     def plot_grid(self, numbers=True):
         # grid: array of nodes; array of array-like
@@ -131,14 +161,6 @@ class wfl_environmet:
             if numbers:
                 plt.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
     
-    def plot_turbines(self, sr, col="white"):
-        for i in range(0, self.n):
-        # plot a red star on top of the grid node if the decsision variable is set 1
-        # also adds a Dmin-diameter circle around this point to show forbidden zones
-            if sr[i] == 1.0:
-                plt.scatter(self.grid[i][0], self.grid[i][1], s=100, c=col, marker="*")
-                #ax.add_artist(plt.Circle((grid[i][0], grid[i][1]), Dmin, alpha=0.1))
-
     # plot heatmap of interference
     def plot_interference(self, sol):
         ifm_sol = np.zeros(shape=(self.axx,self.axy))
@@ -210,7 +232,7 @@ class wfl_environmet:
         for cnt in range(0,self.n):
             for el in self.setE[cnt]:
                 OP_initial.add_constraint(x_vars[cnt] + x_vars[el] <= 1)
-        obj =   OP_initial.sum(self.P(15)*x_vars[i] for i in self.setV)
+        obj = OP_initial.sum(self.P(15)*x_vars[i] for i in self.setV)
         OP_initial.maximize(obj)
         OP_initial.solve()
         self.initial_sol = [OP_initial.solution.get_value(x_vars[element]) for element in self.setV]
@@ -219,15 +241,42 @@ class wfl_environmet:
         filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
         with open(filename, "wb") as sol_file:
             np.save(sol_file, self.sol)
+            np.save(sol_file, self.sol_indexes)
 
-    def load_sol(self):
-        filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
-        try:
-            with open(filename, "rb") as ifm_file:
-                self.sol = np.load(ifm_file, allow_pickle=True)
-        except:
-            print("No mathing file found!")
 
 
 # END OF WFL_ENVIRONMENT CLASS
 # ############################
+
+# ###################################
+# START OF CABLE ROUTING OPTIMIZATION
+
+class cable_routing_optimization(wf_environment):
+    def __init__(self,axx,axy,V0):
+        super().__init__(axx,axy)
+        self.load_layout_sol()
+        self.setVT = self.layout_sol_index
+        self.setV0 = V0
+
+    def calc_setA(self):
+        setA = []
+        for i in self.setV:
+            setA.append([])
+            for j in self.setV:
+                setA[i].append([i,j])
+        self.setA = setA
+    
+    def calc_cost(self):
+        setC = []
+        for i in self.setV:
+            setC.append([])
+            for j in self.setV:
+                setC[i].append(self.dist(i,j))
+        self.setC = setC
+
+    def costs(self,arc):
+        return self.dist(arc[0], arc[1])
+
+# END OF CABLE ROUTING OPTIMIZATION
+# ###################################
+
