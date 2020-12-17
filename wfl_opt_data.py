@@ -257,13 +257,14 @@ class cable_routing_optimization(wf_environment):
         self.load_layout_sol()
         self.setVT = self.layout_sol_index
         self.setV0 = V0
+        self.setVT0 = np.unique(np.append(self.setVT,self.setV0))
 
     def calc_setA(self):
         setA = []
-        for i in self.setV:
-            setA.append([])
-            for j in self.setV:
-                setA[i].append([i,j])
+        for i in self.setVT0:
+            for j in self.setVT0:
+                if i!=j:
+                    setA.append([i,j])
         self.setA = setA
     
     def calc_cost(self):
@@ -274,8 +275,24 @@ class cable_routing_optimization(wf_environment):
                 setC[i].append(self.dist(i,j))
         self.setC = setC
 
-    def costs(self,arc):
-        return self.dist(arc[0], arc[1])
+    def cost(self,arc):
+        node0 = self.grid[arc[0]]
+        node1 = self.grid[arc[1]]
+        return self.dist(node0, node1)
+    
+    def plot_substations(self):
+        for ss in self.setV0:
+            plt.scatter(self.grid[ss][0],self.grid[ss][1], c='blue')
+
+    def plot_arcs(self):
+        for vec in self.sol_arcs:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            print(vec, x0,y0,x1,y1)
+            print("Plot: ", x0,y0,dx,dy)
+            plt.arrow(x0,y0,dx,dy)
 
 # END OF CABLE ROUTING OPTIMIZATION
 # ###################################
