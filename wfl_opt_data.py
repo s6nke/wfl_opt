@@ -154,6 +154,7 @@ class layout_optimization(wf_environment):
             print("no file found, calulated now automatically...")
             self.calc_interference()
             print("Done!")
+    # END INIT_WARMSTART
 
     def warmstart(self, OP, x_vars, Nmin, Nmax):
         print("Initialise warmstart ...")
@@ -163,6 +164,7 @@ class layout_optimization(wf_environment):
             warmstart.add_var_value(x_vars[el], el)
         OP.add_mip_start(warmstart)
         print("Done!")
+    # END WARMSTART
 
     # plot grid nodes
     def plot_grid(self, numbers=True):
@@ -173,6 +175,7 @@ class layout_optimization(wf_environment):
             # add number to t   he node
             if numbers:
                 plt.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
+    # END PLOT_GRID
     
     # plot heatmap of interference
     def plot_interference(self, sol):

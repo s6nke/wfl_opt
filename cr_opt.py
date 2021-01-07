@@ -20,8 +20,8 @@ import numpy as np                  # numpy package
 xAxis = 20           # size of x axis in m
 yAxis = 20           # size of y axis in m
 V0 = [5,yAxis*xAxis-2]  # nodes of substations
-Ph = 1               # power coeff of turbine
-k_cap = [2,10]           # capacity of the cable in one arc -> array when multiple cable types
+Ph = 1                  # power coeff of turbine
+k_cap = 10          # capacity of the cable in one arc -> array when multiple cable types
 
 # -----------
 # Set the optimization environment
@@ -46,6 +46,7 @@ OP = cpx.Model(name="Cable Routing", log_output=True)
 # ----
 # decision variable if cable on the arc is built
 x_vars = OP.binary_var_matrix(keys1=CRenv.setVT0, keys2=CRenv.setVT0, name="x_%i_%i")
+
 # variable defining the power present on the arc
 f_vars = OP.continuous_var_matrix(keys1=CRenv.setVT0, keys2=CRenv.setVT0, name="f_%i_%i")
 
@@ -120,7 +121,7 @@ OP.minimize(OP.sum(obj))
 OP.solve()
 
 # save solution to CRenv and file
-# findinf indices...
+# find indices...
 sol_arcs = []
 for i in CRenv.setVT0:
     for j in CRenv.setVT0:
