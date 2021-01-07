@@ -269,41 +269,90 @@ class layout_optimization(wf_environment):
 
 class cable_routing_optimization(wf_environment):
     def __init__(self,axx,axy,V0):
+        """ 
+        Init of cr object
+        axx: int, size of x axis
+        axy: int, size of y axis
+        V0 : list of substation nodes
+        """
+        # call init from environment
         super().__init__(axx,axy)
+        
+        # load sol file
         self.load_layout_sol()
+        
+        # setVT is the set of node indices from sol turbines
         self.setVT = self.layout_sol_index
+
+        # init substation indices 
         self.setV0 = V0
+
+        # VT0 is turbines and substations; has to be unique
         self.setVT0 = np.unique(np.append(self.setVT,self.setV0))
+    # END __INIT__
 
     def calc_setA(self):
+        """
+        define a set of all possible arcs between turbine nodes
+        """
         setA = []
         for i in self.setVT0:
             for j in self.setVT0:
                 if i!=j:
                     setA.append([i,j])
         self.setA = setA
+    # END CALC_SETA
 
     def cost(self,arc):
+        """
+        deine a cost function based on the distance of the nodes
+        -> i.e. length of the arc
+        """
         node0 = self.grid[arc[0]]
         node1 = self.grid[arc[1]]
         return self.dist(node0, node1)
+    # END COST
     
     def plot_substations(self):
+        """
+        plot helper functon for substations
+        """
         for ss in self.setV0:
             plt.scatter(self.grid[ss][0],self.grid[ss][1], c='blue')
+    # END PLOT_SUBSTATIONS
 
     def plot_arcs(self):
-        for vec in self.sol_arcs:
+        """
+        plot helper function for arcs of the solution
+        """
+        for vec in self.sol_arcs[0]:
             x0,y0 = self.grid[vec[0]]
             x1,y1 = self.grid[vec[1]]
             dx = x1-x0
             dy = y1-y0
-            plt.arrow(x0,y0,dx,dy)
+            plt.arrow(x0,y0,dx,dy, color="yellow")
+        for vec in self.sol_arcs[1]:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            plt.arrow(x0,y0,dx,dy, color="orange")
+        for vec in self.sol_arcs[2]:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            plt.arrow(x0,y0,dx,dy, color="red")
+    # END PLOT_ARCS
     
     def save_sol(self):
+        """
+        save the solution to a numpy file
+        """
         filename = "cr_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
         with open(os.path.join(self.dir_sol,filename), "wb") as sol_file:
             np.save(sol_file, self.sol_arcs)
+    # END SAVE_SOL
 
 # END OF CABLE ROUTING OPTIMIZATION
 # ###################################
