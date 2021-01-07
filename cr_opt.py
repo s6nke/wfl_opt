@@ -21,7 +21,7 @@ xAxis = 20           # size of x axis in m
 yAxis = 20           # size of y axis in m
 V0 = [5,yAxis*xAxis-2]  # nodes of substations
 Ph = 1               # power coeff of turbine
-k_cap = 10           # capacity of the cable in one arc -> array when multiple cable types
+k_cap = [2,10]           # capacity of the cable in one arc -> array when multiple cable types
 
 # -----------
 # Set the optimization environment

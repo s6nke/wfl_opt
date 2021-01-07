@@ -78,6 +78,14 @@ class wf_environment:
         except:
             print("No mathing file found!")
 
+    def load_cable_sol(self):
+        filename = "cr_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        try:
+            with open(os.path.join(self.dir_sol,filename), "rb") as sol_file:
+                self.layout_sol = np.load(sol_file)
+        except:
+            print("No mathing file found!")
+
     def plot_turbines(self, sr, col="white"):
         for i in range(0, self.n):
         # plot a red star on top of the grid node if the decsision variable is set 1
