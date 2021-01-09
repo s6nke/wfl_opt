@@ -101,6 +101,8 @@ for i in OPenv.setV:
 # objective funtion
 # P() is the (linear) power function of the turbine depending on the wind speed
 obj = OP.sum(OPenv.P(15)*x_vars[i] - w_vars[i] for i in OPenv.setV)
+obj += OP.sum( OPenv.dist_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*1/10*x_vars[i] for i in OPenv.setV)
+obj += OP.sum( OPenv.geo_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i] for i in OPenv.setV)
 
 # -----
 # SENSE
@@ -121,30 +123,19 @@ OP.solve()
 
 print("Number of turbines built: ", sum(x_vars[i].solution_value for i in OPenv.setV))
 OPenv.sol = [OP.solution.get_value(x_vars[element]) for element in OPenv.setV]
-#OPenv.sol_int = [OP.solution]
 
-sol_indexes = []
+
+sol_indices = []
 cnt = 0
 for element in OPenv.setV:
     if OP.solution.get_value(x_vars[element]) == 1:
-        sol_indexes.append(cnt)
+        sol_indices.append(cnt)
     cnt += 1
-OPenv.sol_indexes = sol_indexes
+OPenv.sol_indices = sol_indices
 
-
-# ########
-# PLOTTING
-# ########
-fig, ax = plt.subplots()            # create new figure
-OPenv.plot_grid(numbers=False)       # plot_grid() in data file; plots grid nodes
-OPenv.plot_turbines(OPenv.sol, col="black")
-OPenv.plot_turbines(OPenv.initial_sol)
-OPenv.plot_interference(OPenv.sol)
-
-# show the plot, can be removed to prevent the pop-up figure
-plt.show()
 
 # ###########
 # SAVE RESULT
 # ###########
+OPenv.sol_interference()
 OPenv.save_sol()

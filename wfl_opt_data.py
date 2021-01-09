@@ -5,9 +5,7 @@
 # TODO:
 # - adapt power function to represent nonlinear behaviour depending on wind speed
 # - verify optimality
-# - include cable-routing problem
 # - make some comments
-# - update calc of setE to i > j if correct
 # 
 # ----------------
 # LIST OF METHODS:
@@ -41,6 +39,11 @@ import docplex.mp.model as cpx
 # BEGIN of optimization base class
 class wf_environment:
     def __init__(self,axx,axy):
+        """
+        Initialize Environment object with
+        axx: int, dimension in x direction
+        axy: int, dimension in y direction
+        """
         # init variables
         self.axx = axx
         self.axy = axy
@@ -51,12 +54,14 @@ class wf_environment:
         self.init_grid()
 
         # relative path init
-        self.dir = os.path.dirname(__file__)
+        self.dir = os.path.dirname(os.path.abspath(__file__))
         self.dir_sol = os.path.join(self.dir, "solutions")
+    # END __INIT___
 
     def init_grid(self):
-        # construct grid nodes for geometry of the ares
-        # assigns self the grid numpy array
+        """
+        Construct grid nodes
+        """
         print("Generate grid notes ....")
         grid = []
         for ii in range(0,self.axx):
@@ -64,35 +69,86 @@ class wf_environment:
                 grid.append([ii,jj])
         self.grid = np.asarray(grid)
         print("Done!")
+    # INIT_GRID
 
-    # calculate kartesian difference of two grid nodes
     def dist(self, node1, node2):
+        """
+        Kartesian distance of two nodes
+        """
         return np.linalg.norm(node1-node2)
+    # END DIST
    
     def load_layout_sol(self):
-        filename = "opt_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        """
+        Initialize optimal layout from file
+        """
+        print("Load layout file ...")
+        filename = "wfl_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
         try:
-            with open(os.path.join(self.dir_sol,filename), "rb") as sol_file:
-                self.layout_sol = np.load(sol_file)
-                self.layout_sol_index = np.load(sol_file)
+            with open(os.path.join(self.dir_sol,filename), "rb") as layout_file:
+                # the hole grid with 0 and 1
+                self.layout_sol = np.load(layout_file)
+                # only the indices of the turbine nodes
+                self.layout_sol_indices = np.load(layout_file)
+                # interference matrix of the solution
+                self.inf_sol = np.load(layout_file)
+            print("Done!")
         except:
             print("No mathing file found!")
-
+    # END LOAD_LAYOUT_SOL
+    
     def load_cable_sol(self):
-        filename = "cr_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        """
+        Initialize optimal cable routing from file
+        """
+        print("Load cable routing file!")
+        filename = "cable_sol_20_20.csv"
         try:
-            with open(os.path.join(self.dir_sol,filename), "rb") as sol_file:
-                self.layout_sol = np.load(sol_file)
+            with open(os.path.join(self.dir_sol,filename), "rb") as cr_file:
+                self.cr_arcs0 = np.load(cr_file)
+                self.cr_arcs1 = np.load(cr_file)
+                self.cr_arcs2 = np.load(cr_file)
+            print("Done!")
         except:
-            print("No mathing file found!")
+            print("No matching file found!")
+    # END LOAD_CABLE_SOL
 
-    def plot_turbines(self, sr, col="white"):
-        for i in range(0, self.n):
-        # plot a red star on top of the grid node if the decsision variable is set 1
-        # also adds a Dmin-diameter circle around this point to show forbidden zones
-            if sr[i] == 1.0:
-                plt.scatter(self.grid[i][0], self.grid[i][1], s=100, c=col, marker="*")
-                #ax.add_artist(plt.Circle((grid[i][0], grid[i][1]), Dmin, alpha=0.1))
+    def plot_turbines(self, ax, col="black"):
+        """
+        Plot helper function for turbine nodes
+        """
+        for node_index in self.layout_sol_indices:
+            # also adds a Dmin-diameter circle around this point to show forbidden zones
+            ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=20, c=col, marker="o")
+            #ax.add_artist(plt.Circle((grid[i][0], grid[i][1]), Dmin, alpha=0.1))
+        return ax
+    # END PLOT_TURBINES
+
+    def plot_arcs(self):
+        """
+        plot helper function for arcs of the solution
+        """
+        for vec in self.cr_arcs0:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            plt.arrow(x0,y0,dx,dy, color="yellow")
+        for vec in self.cr_arcs1:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            plt.arrow(x0,y0,dx,dy, color="orange")
+        for vec in self.cr_arcs2:
+            x0,y0 = self.grid[vec[0]]
+            x1,y1 = self.grid[vec[1]]
+            dx = x1-x0
+            dy = y1-y0
+            plt.arrow(x0,y0,dx,dy, color="red")
+    # END PLOT_ARCS
+    
+
 
 # END of optimization base class
 # ##############################
@@ -103,6 +159,9 @@ class wf_environment:
 
 class layout_optimization(wf_environment):
     def __init__(self, axx, axy, Dmin=5, k=0.05, V=15, D=1, v_wind=15, w_dirs=[1,1]):
+        """
+        Initialize layout object
+        """
         super().__init__(axx,axy)
         self.Dmin = Dmin
         self.k = k
@@ -112,14 +171,17 @@ class layout_optimization(wf_environment):
         self.w_dirs  = w_dirs
 
         # init calculations
-        self.init_setE()
         self.init_interference_matrix()
-
+        self.init_dist_matrix()
+        self.init_geo_matrix()
+        self.init_setE()
+    # END __INIT__
 
     def init_setE(self):
-        # generate the set E_i
-        # elements of each subset are indexes of the set_V that are in
-        # a distance of Dmin around turbine i
+        """
+        Generate the set E of all nodes that are in the minimum
+        distance to the node i
+        """
         print("Generate set E_i ....")
         set_E = []
         not_set_E = []
@@ -142,6 +204,31 @@ class layout_optimization(wf_environment):
         self.setE = np.array(set_E, dtype=object)
         self.not_setE = np.array(not_set_E, dtype=object)
         print("Done!")
+    # END INIT_SETE
+
+    def init_dist_matrix(self):
+        """
+        calculate linear distance matrix from shore (east)
+        """
+        print("Calculate distance matrix ...")
+        dist_matrix = np.zeros(shape=(self.axx, self.axy))
+        for i in range(self.axx):
+            dist_matrix[:, self.axx-1-i] = i
+        self.dist_matrix = dist_matrix
+        print("Done!")
+    # END INIT_DIST_MATRIX
+
+    def init_geo_matrix(self):
+        """
+        calculate some arbirtrary ground depth
+        """
+        print("Calculate geo matrix ...")
+        x = np.arange(0,self.axx)
+        y = np.arange(0,self.axy)
+        xm, ym = np.meshgrid(x,y)
+        self.geo_matrix = np.sin(xm+ym)-1
+        print("Done!")
+    # END INIT_GEO_MATRIX
 
     def init_interference_matrix(self):
         print("Open interference file ...")
@@ -166,49 +253,64 @@ class layout_optimization(wf_environment):
         print("Done!")
     # END WARMSTART
 
-    # plot grid nodes
-    def plot_grid(self, numbers=True):
+    def plot_grid(self, axs, numbers=True):
         # grid: array of nodes; array of array-like
         for i in range(0,self.n):
             # scatter the node points
-            plt.scatter(self.grid[i][0], self.grid[i][1], s=10, c="black")
-            # add number to t   he node
+            axs.scatter(self.grid[i][0], self.grid[i][1], s=10, c="black")
+            # add number to the node
             if numbers:
-                plt.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
+                axs.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
+        return axs
     # END PLOT_GRID
     
-    # plot heatmap of interference
-    def plot_interference(self, sol):
+    def sol_interference(self):
+        """
+        Helper function for interference of solution -> plotting
+        """
         ifm_sol = np.zeros(shape=(self.axx,self.axy))
-        for i in range(len(sol)):
-            if sol[i] == 1.0:
+        for i in range(len(self.sol)):
+            if self.sol[i] == 1.0:
                 ifm_sol = ifm_sol + self.infer_matrix[i]
-
-        heat = plt.imshow(ifm_sol, cmap='jet', interpolation='bilinear')
-        plt.colorbar(heat)
+        self.sol_inf = ifm_sol
+    # END SOL_INTERFERENCE
 
     def P(self, v_wind):
+        """
+        Linear power function of turbine
+        """
         if v_wind <= 3:
             return 0
         elif 3 < v_wind <= 16:
             return 2.3/13*(v_wind-3)
         elif v_wind > 16:
             return 2.3
+    # END P
 
     def jensen_mod(self, upwind_stream, rotor_diam, distance):
+        """
+        Jensens wake model function
+        """
         k = 0.05 # offshore wake decay coefficient
         return upwind_stream*(1 - np.sqrt(1 - self.thrust_coeff(upwind_stream)))*(rotor_diam/(rotor_diam+2*k*distance))**2
+    # END JENSENS_MOD
 
     def thrust_coeff(self, wind_speed):
+        """
+        Approximation of the thrust coefficicent dependent of the wind speed
+        """
         mod_coeff = 6 # chosen arbitrary to get quite good values
         if wind_speed <= 3:
             return 0
         else:
             return mod_coeff/(wind_speed)
+    # END THURST_COEFF
     
     def calc_interference(self):
-        # calculate interence matrix based on jensens wake model
-        # entries are the loss of power at each node relative to node i
+        """
+        Calculate interence matrix based on jensens wake model
+        entries are the loss of power at each node relative to node i
+        """
         print("Creating interference matrix ...")
         interferenz_matrix = np.zeros(shape=(self.n, self.axx, self.axy))
         for wind_direction in self.w_dirs:
@@ -232,15 +334,23 @@ class layout_optimization(wf_environment):
         self.save_interference(interferenz_matrix)
         self.init_interference_matrix()
         return interferenz_matrix
+    # CALC_INTERFERENCE
     
     def save_interference(self, ifmxx):
+        """
+        Save the interference matrix to a file
+        """
         filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy" 
         print("Save interference matrix to " + filename)
         with open(os.path.join(self.dir_sol,filename), "wb") as infer_file:
             np.save(infer_file, ifmxx)
         print("Done!")
+    # END SAVE_INTERFERENCE
     
     def find_initial_sol(self, Nmin, Nmax):
+        """
+        Search for an unconstrained solution to warmstart the solver
+        """
         OP_initial = cpx.Model(name="Wind Farm Layout", log_output=True)
         x_vars = {(i): OP_initial.binary_var(name="x_{0}".format(i)) for i in self.setV}
         OP_initial.add_constraint(OP_initial.sum(x_vars[i] for i in self.setV) <= Nmax)
@@ -252,12 +362,18 @@ class layout_optimization(wf_environment):
         OP_initial.maximize(obj)
         OP_initial.solve()
         self.initial_sol = [OP_initial.solution.get_value(x_vars[element]) for element in self.setV]
+    # END FIND_INITIAL_SOL
 
     def save_sol(self):
+        """
+        Save solution of optimizaton method to file
+        """
         filename = "../solutions/wfl_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
         with open(os.path.join(self.dir_sol, filename), "wb") as sol_file:
             np.save(sol_file, self.sol)
-            np.save(sol_file, self.sol_indexes)
+            np.save(sol_file, self.sol_indices)
+            np.save(sol_file, self.sol_inf)
+    # END SAVE_SOL
 
 
 
@@ -282,7 +398,7 @@ class cable_routing_optimization(wf_environment):
         self.load_layout_sol()
         
         # setVT is the set of node indices from sol turbines
-        self.setVT = self.layout_sol_index
+        self.setVT = self.layout_sol_indices
 
         # init substation indices 
         self.setV0 = V0
@@ -321,37 +437,18 @@ class cable_routing_optimization(wf_environment):
             plt.scatter(self.grid[ss][0],self.grid[ss][1], c='blue')
     # END PLOT_SUBSTATIONS
 
-    def plot_arcs(self):
-        """
-        plot helper function for arcs of the solution
-        """
-        for vec in self.sol_arcs[0]:
-            x0,y0 = self.grid[vec[0]]
-            x1,y1 = self.grid[vec[1]]
-            dx = x1-x0
-            dy = y1-y0
-            plt.arrow(x0,y0,dx,dy, color="yellow")
-        for vec in self.sol_arcs[1]:
-            x0,y0 = self.grid[vec[0]]
-            x1,y1 = self.grid[vec[1]]
-            dx = x1-x0
-            dy = y1-y0
-            plt.arrow(x0,y0,dx,dy, color="orange")
-        for vec in self.sol_arcs[2]:
-            x0,y0 = self.grid[vec[0]]
-            x1,y1 = self.grid[vec[1]]
-            dx = x1-x0
-            dy = y1-y0
-            plt.arrow(x0,y0,dx,dy, color="red")
-    # END PLOT_ARCS
-    
     def save_sol(self):
         """
         save the solution to a numpy file
         """
-        filename = "cr_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
-        with open(os.path.join(self.dir_sol,filename), "wb") as sol_file:
-            np.save(sol_file, self.sol_arcs)
+        print("Save solution to file ...")
+        filename = "cable_sol_" + str(self.axx) + "_" + str(self.axy) + ".csv"
+        #pd.DataFrame(self.sol_arcs).to_csv(os.path.join(self.dir_sol, filename))
+        with open(os.path.join(self.dir_sol,filename), "wb") as cr_sol:
+            np.save(cr_sol, self.sol_arcs0)
+            np.save(cr_sol, self.sol_arcs1)
+            np.save(cr_sol, self.sol_arcs2)
+        print("Done!")
     # END SAVE_SOL
 
 # END OF CABLE ROUTING OPTIMIZATION

@@ -147,15 +147,9 @@ for i in CRenv.setVT0:
             sol_arcs_2.append([i,j])
 
 # save to env
-CRenv.sol_arcs = [sol_arcs_0,sol_arcs_1,sol_arcs_2]
+CRenv.sol_arcs0 = np.asarray(sol_arcs_0)
+CRenv.sol_arcs1 = np.asarray(sol_arcs_1)
+CRenv.sol_arcs2 = np.asarray(sol_arcs_2)
+
 # save to file
 CRenv.save_sol()
-
-##########
-# PLOTTING
-##########
-fig,ax = plt.subplots()
-CRenv.plot_turbines(CRenv.layout_sol, col="red")
-CRenv.plot_substations()
-CRenv.plot_arcs()
-plt.show()
