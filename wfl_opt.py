@@ -23,7 +23,7 @@ import numpy as np                  # numpy package
 xAxis = 20           # size of x axis in m
 yAxis = 20           # size of y axis in m
 Nmin  = 0            # minimal number of turbines
-Nmax  = 200           # maximal number of turbines
+Nmax  = 60           # maximal number of turbines
 Dmin  = 2            # minimum distance between turbines
 k       = 0.05       # wake decay coefficient
 V       = 15         # m/s
@@ -100,9 +100,12 @@ for i in OPenv.setV:
 
 # objective funtion
 # P() is the (linear) power function of the turbine depending on the wind speed
-obj = OP.sum(OPenv.P(15)*x_vars[i] - w_vars[i] for i in OPenv.setV)
-obj += OP.sum( OPenv.dist_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*1/10*x_vars[i] for i in OPenv.setV)
-obj += OP.sum( OPenv.geo_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i] for i in OPenv.setV)
+ppMWh = 300
+obj = OP.sum((OPenv.P(15)*x_vars[i] - w_vars[i])*ppMWh
+            - OPenv.dist_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
+            + OPenv.geo_matrix[  OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
+            for i in OPenv.setV)
+
 
 # -----
 # SENSE

@@ -113,6 +113,17 @@ class wf_environment:
             print("No matching file found!")
     # END LOAD_CABLE_SOL
 
+    def load_dist_geo(self):
+        print("Load distance and geo file")
+        filename = "dist_geo_20_20.npy"
+        try:
+            with open(os.path.join(self.dir_sol,filename), "rb") as dg_file:
+                self.dist_matrix = np.load(dg_file)
+                self.geo_matrix  = np.load(dg_file)
+        except:
+            print("Unable to read file!")
+    # END LOAD_DIST_GEO
+
     def plot_turbines(self, ax, col="black"):
         """
         Plot helper function for turbine nodes
@@ -174,6 +185,7 @@ class layout_optimization(wf_environment):
         self.init_interference_matrix()
         self.init_dist_matrix()
         self.init_geo_matrix()
+        self.save_dist_geo()
         self.init_setE()
     # END __INIT__
 
@@ -211,10 +223,11 @@ class layout_optimization(wf_environment):
         calculate linear distance matrix from shore (east)
         """
         print("Calculate distance matrix ...")
+        ppm_offshore = 5/self.axx
         dist_matrix = np.zeros(shape=(self.axx, self.axy))
         for i in range(self.axx):
-            dist_matrix[:, self.axx-1-i] = i
-        self.dist_matrix = dist_matrix
+            dist_matrix[:, self.axx-1-i] = i*ppm_offshore
+        self.dist_matrix = np.transpose(dist_matrix)
         print("Done!")
     # END INIT_DIST_MATRIX
 
@@ -223,10 +236,11 @@ class layout_optimization(wf_environment):
         calculate some arbirtrary ground depth
         """
         print("Calculate geo matrix ...")
+        ppm_depth = 10
         x = np.arange(0,self.axx)
         y = np.arange(0,self.axy)
         xm, ym = np.meshgrid(x,y)
-        self.geo_matrix = np.sin(xm+ym)-1
+        self.geo_matrix = (np.sin(xm+ym)-1)*ppm_depth
         print("Done!")
     # END INIT_GEO_MATRIX
 
@@ -241,7 +255,18 @@ class layout_optimization(wf_environment):
             print("no file found, calulated now automatically...")
             self.calc_interference()
             print("Done!")
-    # END INIT_WARMSTART
+    # END INIT_INTERFERENCE_MATRIX
+
+    def save_dist_geo(self):
+        print("Save distance and geo matrices!")
+        try:
+            filename = "dist_geo_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+            with open(os.path.join(self.dir_sol,filename), "wb") as dg_file:
+                np.save(dg_file, self.dist_matrix)
+                np.save(dg_file, self.geo_matrix)
+        except:
+            print("unable to solve file")
+    # END SAVE_DIST_GEO
 
     def warmstart(self, OP, x_vars, Nmin, Nmax):
         print("Initialise warmstart ...")
