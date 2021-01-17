@@ -23,6 +23,7 @@ V0 = [5,yAxis*xAxis-2]  # nodes of substations
 Ph = 1                  # power coeff of turbine
 k_cap = [2,5,10]          # capacity of the cable in one arc -> array when multiple cable types
 T = len(k_cap)
+
 # -----------
 # Set the optimization environment
 # loads solution file automatically if existant

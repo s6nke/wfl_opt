@@ -12,6 +12,7 @@
 # ------------
 # DEPENDENCIES
 # ------------
+import os
 from  wfl_opt_data import *         # data file; containing all relevant data; place in ./
 import docplex.mp.model as cpx      # docplex requiring cplex installation
 import matplotlib.pyplot as plt     # pyplot required for plotting
@@ -22,18 +23,16 @@ import numpy as np                  # numpy package
 # ---------
 xAxis = 20           # size of x axis in m
 yAxis = 20           # size of y axis in m
-Nmin  = 0            # minimal number of turbines
-Nmax  = 60           # maximal number of turbines
-Dmin  = 2            # minimum distance between turbines
+Nmin  = 5            # minimal number of turbines
+Nmax  = 20           # maximal number of turbines
+Dmin  = 3            # minimum distance between turbines
 k       = 0.05       # wake decay coefficient
-V       = 15         # m/s
-D       = 1          # rotor diameter
-v_wind  = 15
-w_dirs  = np.array([[1,1]])#, [0,1], [1,1], [-1,0], [-1,-1], [0,-1]])
+D       = 2          # rotor diameter
 
 # -----------
 # Set the optimization environment
-OPenv = layout_optimization(xAxis, yAxis, Dmin, k, V, D, v_wind, w_dirs)
+OPenv = layout_optimization(xAxis, yAxis, 1, Dmin, k, D)
+
 
 
 ##############
@@ -58,36 +57,34 @@ print("Decision variables set!")
 # CONSTRAINTS
 # -----------
 # min max constraint of number of turbines
-OP.add_constraint(OP.sum(x_vars[i] for i in OPenv.setV) <= Nmax)
-OP.add_constraint(OP.sum(x_vars[i] for i in OPenv.setV) >= Nmin)
+OP.add_constraint(OP.sum(x_vars[i] for i in OPenv.setV) <= Nmax, ctname="minimum number constraint")
+OP.add_constraint(OP.sum(x_vars[i] for i in OPenv.setV) >= Nmin, ctname="maximum number constraint")
 print("Number of turbines constraints set!")
 
 # geometric constraint
 # requires the set_E[i] to be defined as the set of nodes that are in the distance
 # of Dmin around the chosen node [i]
 # this adds a constraint for from every node [i] to every node[j] for all i,j el of grid
-for cnt in range(0,OPenv.n):
-    for el in OPenv.setE[cnt]:
-        OP.add_constraint(x_vars[cnt] + x_vars[el] <= 1)
+for i in OPenv.setV:
+    for j in OPenv.setE[i]:
+        OP.add_constraint(x_vars[i] + x_vars[j] <= 1, ctname="distance constraint")
 print("Minimal distance constraint set!")
-
 
 bigM = []
 for i in OPenv.setV:
     Mi = 0
     for j in OPenv.not_setE[i]:
         xj, yj = OPenv.grid[j]
-        Mi = Mi + OPenv.infer_matrix[i,xj,yj]
+        Mi += OPenv.infer_matrix[i,yj,xj]
     bigM.append(Mi)
 
 for i in OPenv.setV:
+    inf_ij = 0
     for j in OPenv.setV:
-        if i != j:
-            # look up coordinates
+        if j != i:
             xj, yj = OPenv.grid[j]
-            # add constraint
-            if OPenv.infer_matrix[i,xj,yj] < bigM[i]:
-                OP.add_constraint(OPenv.infer_matrix[i,xj,yj] <= w_vars[i] + bigM[i]*(1-x_vars[i]))
+            inf_ij += OPenv.infer_matrix[i,yj,xj]*x_vars[j]
+    OP.add_constraint(inf_ij <= (w_vars[i] + bigM[i]*(1-x_vars[i])), ctname="big M constraint")
 print("Big-m constraint set!")
 
 # wi positive constraint
@@ -101,9 +98,10 @@ for i in OPenv.setV:
 # objective funtion
 # P() is the (linear) power function of the turbine depending on the wind speed
 ppMWh = 300
-obj = OP.sum((OPenv.P(15)*x_vars[i] - w_vars[i])*ppMWh
-            - OPenv.dist_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
-            + OPenv.geo_matrix[  OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
+
+obj = OP.sum((OPenv.Pi*x_vars[i] - w_vars[i])#*ppMWh
+            #- OPenv.dist_matrix[ OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
+            #+ OPenv.geo_matrix[  OPenv.grid[i][0], OPenv.grid[i][1] ]*x_vars[i]
             for i in OPenv.setV)
 
 
@@ -127,6 +125,8 @@ OP.solve()
 print("Number of turbines built: ", sum(x_vars[i].solution_value for i in OPenv.setV))
 OPenv.sol = [OP.solution.get_value(x_vars[element]) for element in OPenv.setV]
 
+OPenv.sol_obj = OP.solution.get_objective_value()
+print(OPenv.sol_obj)
 
 sol_indices = []
 cnt = 0
@@ -136,6 +136,9 @@ for element in OPenv.setV:
     cnt += 1
 OPenv.sol_indices = sol_indices
 
+for i in OPenv.setV:
+    if OP.solution.get_value(x_vars[i]) == 1:
+        print(OP.solution.get_value(w_vars[i]))
 
 # ###########
 # SAVE RESULT

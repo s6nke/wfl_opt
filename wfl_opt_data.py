@@ -1,11 +1,11 @@
 #-------------------------------------
-# Data file for optimizing a offshore wind farm layout
+# MODULE file for optimizing a offshore wind farm layout
 #-------------------------------------
 #
 # TODO:
-# - adapt power function to represent nonlinear behaviour depending on wind speed
 # - verify optimality
 # - make some comments
+# - set A new calc, when j > i
 # 
 # ----------------
 # LIST OF METHODS:
@@ -34,6 +34,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import docplex.mp.model as cpx  
+#import pandas as pd
 
 # ################################
 # BEGIN of optimization base class
@@ -55,7 +56,8 @@ class wf_environment:
 
         # relative path init
         self.dir = os.path.dirname(os.path.abspath(__file__))
-        self.dir_sol = os.path.join(self.dir, "solutions")
+        self.dir_sol  = os.path.join(self.dir, "solutions")
+        self.dir_wind = os.path.join(self.dir, "wind_files")
     # END __INIT___
 
     def init_grid(self):
@@ -64,9 +66,9 @@ class wf_environment:
         """
         print("Generate grid notes ....")
         grid = []
-        for ii in range(0,self.axx):
-            for jj in range(0,self.axy):
-                grid.append([ii,jj])
+        for i in range(0,self.axx):
+            for j in range(0,self.axy):
+                grid.append([i,j])
         self.grid = np.asarray(grid)
         print("Done!")
     # INIT_GRID
@@ -77,13 +79,16 @@ class wf_environment:
         """
         return np.linalg.norm(node1-node2)
     # END DIST
+
+    def eval_obj(self):
+        pass
    
-    def load_layout_sol(self):
+    def load_layout_sol(self, WindInd):
         """
         Initialize optimal layout from file
         """
         print("Load layout file ...")
-        filename = "wfl_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        filename = "wfl_sol_" + str(self.axx) + "_" + str(self.axy) + "_" + str(WindInd) + ".npy"
         try:
             with open(os.path.join(self.dir_sol,filename), "rb") as layout_file:
                 # the hole grid with 0 and 1
@@ -92,6 +97,8 @@ class wf_environment:
                 self.layout_sol_indices = np.load(layout_file)
                 # interference matrix of the solution
                 self.inf_sol = np.load(layout_file)
+                # objective value
+                self.layout_sol_obj = np.load(layout_file)
             print("Done!")
         except:
             print("No mathing file found!")
@@ -113,6 +120,17 @@ class wf_environment:
             print("No matching file found!")
     # END LOAD_CABLE_SOL
 
+    def load_infer_matrix(self,WindInd):
+        print("Open interference file ...")
+        try:
+            filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + "_" + str(WindInd) + ".npy"
+            with open(os.path.join(self.dir_sol,filename), "rb") as infer_file:
+                self.infer_matrix = np.load(infer_file)
+            print("Done!")
+        except:
+            print("Failed!")
+    # END INIT_INTERFERENCE_MATRIX
+
     def load_dist_geo(self):
         print("Load distance and geo file")
         filename = "dist_geo_20_20.npy"
@@ -124,16 +142,40 @@ class wf_environment:
             print("Unable to read file!")
     # END LOAD_DIST_GEO
 
-    def plot_turbines(self, ax, col="black"):
+    def load_initial_sol(self):
+        print("Loading initial solution")
+        filename = "wfl_initial_sol_20_20.npy"
+        try:
+            with open(os.path.join(self.dir_sol,filename), "rb") as ini_file:
+                self.initial_sol = np.load(ini_file)
+        except:
+            print("something failed")
+
+    def plot_turbines(self, ax, which="sol", col="black"):
         """
         Plot helper function for turbine nodes
         """
-        for node_index in self.layout_sol_indices:
-            # also adds a Dmin-diameter circle around this point to show forbidden zones
-            ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=20, c=col, marker="o")
-            #ax.add_artist(plt.Circle((grid[i][0], grid[i][1]), Dmin, alpha=0.1))
+        if which == "sol":
+            for node_index in self.layout_sol_indices:  
+                ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=20, facecolor="white", edgecolor=col)
+        if which == "initial":
+            for node_index in self.initial_sol:
+                # also adds a Dmin-diameter circle around this point to show forbidden zones
+                ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=20, facecolor="white", edgecolor=col)
+                ax.add_artist(plt.Circle((self.grid[node_index][0], self.grid[node_index][1]), 2, alpha=0.1))
         return ax
     # END PLOT_TURBINES
+
+    def plot_grid(self, axs, numbers=True):
+        # grid: array of nodes; array of array-like
+        for i in range(0,self.n):
+            # scatter the node points
+            axs.scatter(self.grid[i][0], self.grid[i][1], marker="o", s=10, facecolor="white", edgecolor="black")
+            # add number to the node
+            if numbers:
+                axs.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
+        return axs
+    # END PLOT_GRID
 
     def plot_arcs(self):
         """
@@ -158,9 +200,9 @@ class wf_environment:
             dy = y1-y0
             plt.arrow(x0,y0,dx,dy, color="red")
     # END PLOT_ARCS
-    
-
-
+#
+#
+#
 # END of optimization base class
 # ##############################
 
@@ -169,25 +211,52 @@ class wf_environment:
 # BEGIN OF WFL ENVIRONMENT CLASS
 
 class layout_optimization(wf_environment):
-    def __init__(self, axx, axy, Dmin=5, k=0.05, V=15, D=1, v_wind=15, w_dirs=[1,1]):
+    def __init__(self, axx, axy, WindInd, Dmin=5, k=0.05, D=1):
         """
         Initialize layout object
         """
         super().__init__(axx,axy)
         self.Dmin = Dmin
         self.k = k
-        self.V = V
         self.D = D
-        self.v_wind = v_wind
-        self.w_dirs  = w_dirs
+        self.init_wind_data(WindInd)
+        self.WindInd = WindInd
 
         # init calculations
+        self.Pi()
         self.init_interference_matrix()
         self.init_dist_matrix()
         self.init_geo_matrix()
         self.save_dist_geo()
         self.init_setE()
     # END __INIT__
+
+    def Pi(self):
+        vi = 0
+        for i in range(self.v_wind.shape[0]):
+            vi += self.v_wind[i]*(1/self.v_wind.shape[0])
+        self.Pi = self.P(vi)
+        print(self.Pi)
+    # END PI
+
+    def init_wind_data(self,ind):
+        if ind == 1:
+            self.w_dirs = np.asarray([[-0.64278761, -0.766044443]], dtype=object)
+            self.v_wind = np.asarray([7.865316456])
+        if ind == 3:
+            self.w_dirs = np.asarray([[0.5, 0.8660254], [-1,0], [-0.5, -0.866025404]], dtype=object)
+            self.v_wind = np.asarray([6.11724, 7.5345, 8.1747967])
+        if ind == 6:
+            self.w_dirs = np.asarray([[0.866025404, 0.5], [0,1], [-0.866025404, 0.5], [-0.866025404, -0.5], [0,-1], [0.866025404, -0.5]], dtype=object)
+            self.v_wind = np.asarray([5.148139535, 6.491644205, 6.599352451, 8.062937794, 7.783281925, 8.700165563])
+        if ind == 12:
+            self.w_dirs = np.asarray([[0.965925826, 0.258819045], [0.707106781,	0.707106781], [-0.258819045,	0.965925826], [-0.707106781,	0.707106781],
+                            [-0.965925826,	0.258819045],  [-0.965925826,	-0.258819045], [-0.707106781,	-0.707106781], [-0.258819045,	-0.965925826], 
+                            [0.258819045,	-0.965925826], [0.707106781,	-0.707106781], [0.965925826,	-0.258819045]], dtype=object) 
+            self.v_wind = np.asarray([4.963253012,5.264393939,5.687431694,6.885676037,
+                            6.451231527,6.790466102,7.970072993,8.132905591,7.557476636,
+                            8.035947712,9.142967885,7.389180328])
+    # END INIT_WIND_DATA
 
     def init_setE(self):
         """
@@ -197,29 +266,27 @@ class layout_optimization(wf_environment):
         print("Generate set E_i ....")
         set_E = []
         not_set_E = []
-        for l in range(0,self.n):
+        for i in self.setV:
             # create empty sub-list
             set_E.append([])
             not_set_E.append([])
-            for k in range(0,self.n):
-                # check if the node is in Dmin to our node[l]
-                if self.dist(self.grid[l], self.grid[k]) <= self.Dmin:
-                    # if too close add to set_E sublist
-                    set_E[l].append(k)
+            for j in self.setV:
+                if j > i:
+                    # check if the node is in Dmin to our node[i]
+                    if self.dist(self.grid[i], self.grid[j]) < self.Dmin:
+                        # if too close add to set_E sublist
+                        set_E[i].append(j)
+                    else:
+                        not_set_E[i].append(j)
                 else:
-                    not_set_E[l].append(k)
-            # remove the node itself from the set to prevent false addition if set true
-            try:
-                set_E[l].remove(l)
-            except:
-                not_set_E[l].remove(l)
+                    not_set_E[i].append(j)
         self.setE = np.array(set_E, dtype=object)
         self.not_setE = np.array(not_set_E, dtype=object)
         print("Done!")
     # END INIT_SETE
 
     def init_dist_matrix(self):
-        """
+        """ 
         calculate linear distance matrix from shore (east)
         """
         print("Calculate distance matrix ...")
@@ -227,7 +294,7 @@ class layout_optimization(wf_environment):
         dist_matrix = np.zeros(shape=(self.axx, self.axy))
         for i in range(self.axx):
             dist_matrix[:, self.axx-1-i] = i*ppm_offshore
-        self.dist_matrix = np.transpose(dist_matrix)
+        self.dist_matrix = dist_matrix
         print("Done!")
     # END INIT_DIST_MATRIX
 
@@ -240,14 +307,14 @@ class layout_optimization(wf_environment):
         x = np.arange(0,self.axx)
         y = np.arange(0,self.axy)
         xm, ym = np.meshgrid(x,y)
-        self.geo_matrix = (np.sin(xm+ym)-1)*ppm_depth
+        self.geo_matrix = (np.sin((xm)/5)-1)*ppm_depth
         print("Done!")
     # END INIT_GEO_MATRIX
 
     def init_interference_matrix(self):
         print("Open interference file ...")
         try:
-            filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy"
+            filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + "_" + str(self.WindInd) + ".npy"
             with open(os.path.join(self.dir_sol,filename), "rb") as infer_file:
                 self.infer_matrix = np.load(infer_file)
             print("Done!")
@@ -277,17 +344,6 @@ class layout_optimization(wf_environment):
         OP.add_mip_start(warmstart)
         print("Done!")
     # END WARMSTART
-
-    def plot_grid(self, axs, numbers=True):
-        # grid: array of nodes; array of array-like
-        for i in range(0,self.n):
-            # scatter the node points
-            axs.scatter(self.grid[i][0], self.grid[i][1], s=10, c="black")
-            # add number to the node
-            if numbers:
-                axs.text(self.grid[i][0], self.grid[i][1], "{0}".format(i))
-        return axs
-    # END PLOT_GRID
     
     def sol_interference(self):
         """
@@ -304,12 +360,12 @@ class layout_optimization(wf_environment):
         """
         Linear power function of turbine
         """
-        if v_wind <= 3:
+        if v_wind <= 1:
             return 0
-        elif 3 < v_wind <= 16:
-            return 2.3/13*(v_wind-3)
+        elif 1 < v_wind <= 16:
+            return 2300/15*(v_wind-1)
         elif v_wind > 16:
-            return 2.3
+            return 2300
     # END P
 
     def jensen_mod(self, upwind_stream, rotor_diam, distance):
@@ -324,12 +380,13 @@ class layout_optimization(wf_environment):
         """
         Approximation of the thrust coefficicent dependent of the wind speed
         """
-        mod_coeff = 6 # chosen arbitrary to get quite good values
+        mod_coeff =  4 # chosen arbitrary to get quite good values
         if wind_speed <= 3:
             return 0
         else:
-            return mod_coeff/(wind_speed)
-    # END THURST_COEFF
+            #return mod_coeff/(wind_speed)
+            return 0.8
+    # END THRuST_COEFF
     
     def calc_interference(self):
         """
@@ -338,10 +395,11 @@ class layout_optimization(wf_environment):
         """
         print("Creating interference matrix ...")
         interferenz_matrix = np.zeros(shape=(self.n, self.axx, self.axy))
+        pos = 0
         for wind_direction in self.w_dirs:
-            for i in range(0, self.n):
+            for i in self.setV:
                 infer  = []
-                for j in range(0, self.n):
+                for j in self.setV:
                     alpha   = np.matmul(np.transpose(self.grid[j] - self.grid[i]), wind_direction) / np.linalg.norm(wind_direction)**2
                     if alpha < 0:
                         infer.append(0)
@@ -350,54 +408,62 @@ class layout_optimization(wf_environment):
                         delta_1 = self.dist(self.grid[i], P_prime)
                         delta_2 = self.dist(self.grid[j], P_prime)
                         if delta_2 <= (self.D+2*self.k*delta_1)/2:
-                            infer.append( self.P(self.v_wind) - self.P(self.v_wind - self.jensen_mod(self.V, self.D, delta_1)) )
+                            infer.append( self.P(self.v_wind[pos]) - self.P(self.v_wind[pos] - self.jensen_mod(self.v_wind[pos], self.D, delta_1)) )
                         else:
                             infer.append(0)
-                interferenz_matrix[i] += (1/self.w_dirs.shape[0])*np.array(infer).reshape((self.axx, self.axy)).T
-            
-        print("Done!")
-        self.save_interference(interferenz_matrix)
-        self.init_interference_matrix()
-        return interferenz_matrix
-    # CALC_INTERFERENCE
-    
-    def save_interference(self, ifmxx):
-        """
-        Save the interference matrix to a file
-        """
-        filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + ".npy" 
+                interferenz_matrix[i] += (1/self.w_dirs.shape[0])*(1/self.w_dirs.shape[0])*np.array(infer).reshape((self.axx, self.axy)).T
+            pos += 1
+
+        filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + "_" + str(self.WindInd) +".npy" 
         print("Save interference matrix to " + filename)
         with open(os.path.join(self.dir_sol,filename), "wb") as infer_file:
-            np.save(infer_file, ifmxx)
-        print("Done!")
-    # END SAVE_INTERFERENCE
+            np.save(infer_file, interferenz_matrix)
+  
+        self.init_interference_matrix()
+        print("Done!") 
+    # END CALC_INTERFERENCE
     
     def find_initial_sol(self, Nmin, Nmax):
         """
         Search for an unconstrained solution to warmstart the solver
         """
-        OP_initial = cpx.Model(name="Wind Farm Layout", log_output=True)
+        print("Doing init with warmstart")
+        OP_initial = cpx.Model(name="Wind Farm Layout Warmstart", log_output=True)
         x_vars = {(i): OP_initial.binary_var(name="x_{0}".format(i)) for i in self.setV}
         OP_initial.add_constraint(OP_initial.sum(x_vars[i] for i in self.setV) <= Nmax)
         OP_initial.add_constraint(OP_initial.sum(x_vars[i] for i in self.setV) >= Nmin)
         for cnt in range(0,self.n):
             for el in self.setE[cnt]:
                 OP_initial.add_constraint(x_vars[cnt] + x_vars[el] <= 1)
-        obj = OP_initial.sum(self.P(15)*x_vars[i] for i in self.setV)
+        obj = OP_initial.sum(self.Pi*x_vars[i] for i in self.setV)
         OP_initial.maximize(obj)
         OP_initial.solve()
         self.initial_sol = [OP_initial.solution.get_value(x_vars[element]) for element in self.setV]
+        
+        initial_sol_indices = []
+        cnt = 0
+        for element in self.setV:
+            if OP_initial.solution.get_value(x_vars[element]) == 1:
+                initial_sol_indices.append(cnt)
+            cnt += 1
+
+        # save this
+        filename = "wfl_initial_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        with open(os.path.join(self.dir_sol, filename), "wb") as sol_file:
+            np.save(sol_file, initial_sol_indices)
     # END FIND_INITIAL_SOL
 
     def save_sol(self):
         """
         Save solution of optimizaton method to file
         """
-        filename = "../solutions/wfl_sol_" + str(self.axx) + "_" + str(self.axy) + ".npy"
+        filename = "../solutions/wfl_sol_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.WindInd) +".npy"
         with open(os.path.join(self.dir_sol, filename), "wb") as sol_file:
             np.save(sol_file, self.sol)
             np.save(sol_file, self.sol_indices)
             np.save(sol_file, self.sol_inf)
+            np.save(sol_file, self.sol_obj)
+        print("Done!")
     # END SAVE_SOL
 
 
