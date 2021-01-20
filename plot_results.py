@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from wfl_opt_data import *
 import os
 
+# Paramters
 axx = 20
 axy = 20
 x = np.arange(0,axx)
@@ -11,14 +12,14 @@ xm, ym = np.meshgrid(x,y)
 direc = os.path.dirname(__file__)
 fig_dir = os.path.join(direc, "figures")
 
+# Load values from solution files
 Env = wf_environment(axx,axy)
 Env.load_layout_sol(1)
+print(Env.layout_sol_obj)
 Env.load_cable_sol()
 Env.load_dist_geo()
 Env.load_initial_sol()
-# - layout_sol
-# - layout_sol_index
-# - inf_sol
+
 
 """
 Plot interference of the solution
@@ -26,13 +27,13 @@ Plot interference of the solution
 fig0, ax0 = plt.subplots()
 heat = plt.imshow(Env.inf_sol, cmap='jet', interpolation='bilinear')
 cbar = plt.colorbar(heat)
-cbar.ax.set_title("Power loss in kW")
+cbar.ax.set_title("Leistungsverlust in kW")
 Env.plot_turbines(ax0)
 plt.xlabel("x")
 plt.ylabel("y")
 plt.gca().invert_yaxis()
 #plt.savefig(os.path.join(fig_dir, "inf_sol_20_1.png"))
-#plt.close(fig0)
+plt.close(fig0)
 
 """
 Plot solution layout
@@ -50,10 +51,11 @@ Plot cables
 fig2, ax2 = plt.subplots()
 Env.plot_arcs()
 Env.plot_turbines(ax2)
+Env.plot_substations(ax2)
 plt.xlabel("x")
 plt.ylabel("y")
-#plt.savefig(os.path.join(fig_dir, "cables.png"))
-plt.close(fig2)
+#plt.savefig(os.path.join(fig_dir, "cables2.png"))
+#plt.close(fig2)
 
 """
 Plot distance geometry of depth in 3D
@@ -61,20 +63,37 @@ Plot distance geometry of depth in 3D
 fig3a = plt.figure()
 ax3a = fig3a.add_subplot(projection="3d")
 surf = ax3a.plot_surface(xm,ym,Env.geo_matrix, cmap="hot")
-fig3a.colorbar(surf, ax=ax3a)
+ax3a.set_zlabel("Tiefe [m]")
 plt.xlabel("x")
 plt.ylabel("y")
-ax3a.set_zlabel("depth/m")
-#plt.savefig(os.path.join(fig_dir, "geo.png"))
+#plt.savefig(os.path.join(fig_dir, "geo3D.png"))
 plt.close(fig3a)
+
+"""
+Plot distance geometry of depth in 2D
+"""
+fig3a2, ax3a2 = plt.subplots()
+surf = ax3a2.imshow(Env.geo_matrix, cmap="hot", interpolation="bilinear")
+fig3a2.colorbar(surf, ax=ax3a2)
+plt.xlabel("x")
+plt.ylabel("y")
+#plt.savefig(os.path.join(fig_dir, "geo2D.png"))
+plt.close(fig3a2)
 
 """
 Plot geometry of depth with solution
 """
 fig3b, ax3b = plt.subplots()
-surf = ax3b.contourf(xm,ym,Env.geo_matrix, cmap="hot")
+surf = ax3b.imshow(Env.geo_matrix, cmap="hot", interpolation="bilinear")
 fig3b.colorbar(surf, ax=ax3b)
 Env.plot_turbines(ax3b)
+#
+#with open(os.path.join(direc, "solutions/wfl_sol_20_20_1.npy"), "rb") as bla:
+#    layout = np.load(bla)
+#    layout_ind  = np.load(bla)
+#for node_index in layout_ind:  
+#    ax3b.scatter(Env.grid[node_index][0], Env.grid[node_index][1], s=100, alpha=0.2, facecolor="blue", edgecolor="black")
+#
 plt.xlabel("x")
 plt.ylabel("y")
 #plt.savefig(os.path.join(fig_dir, "geo_sol.png"))
@@ -123,14 +142,16 @@ fig7, ax7 = plt.subplots()
 Env.plot_turbines(ax7, which="initial")
 plt.xlabel("x")
 plt.ylabel("y")
+ax7.set_xticks([0,2.5,5,7.5,10,12.5,15,17.5])
 #plt.savefig(os.path.join(fig_dir, "initial.png"))
 plt.close(fig7)
 
 
-# show plots
 plt.show()
 
 
 # ###################
 # CALCULATIONS
 # ###################
+
+Env.eval_obj(1,3,6,12,1)

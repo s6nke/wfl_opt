@@ -19,9 +19,9 @@ import numpy as np                  # numpy package
 # ---------
 xAxis = 20           # size of x axis in m
 yAxis = 20           # size of y axis in m
-V0 = [5,yAxis*xAxis-2]  # nodes of substations
+V0 = [190]  #15 nodes of substations
 Ph = 1                  # power coeff of turbine
-k_cap = [2,5,10]          # capacity of the cable in one arc -> array when multiple cable types
+k_cap = [2,3,6]          # capacity of the cable in one arc -> array when multiple cable types
 T = len(k_cap)
 
 # -----------
@@ -151,6 +151,8 @@ for i in CRenv.setVT0:
 CRenv.sol_arcs0 = np.asarray(sol_arcs_0)
 CRenv.sol_arcs1 = np.asarray(sol_arcs_1)
 CRenv.sol_arcs2 = np.asarray(sol_arcs_2)
+
+print(OP.solution.get_objective_value())
 
 # save to file
 CRenv.save_sol()

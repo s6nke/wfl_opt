@@ -34,7 +34,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import docplex.mp.model as cpx  
-#import pandas as pd
 
 # ################################
 # BEGIN of optimization base class
@@ -80,15 +79,76 @@ class wf_environment:
         return np.linalg.norm(node1-node2)
     # END DIST
 
-    def eval_obj(self):
-        pass
+    def eval_obj(self, lay1, lay2, lay3, lay4, windcase):
+        """
+        Evaluation function to compare the objective value of different layouts to different
+        wind scenarios
+        """
+        layout_1, P1, obj1 = self.load_layout_sol(lay1, ret=True)
+        layout_2, P2, obj2 = self.load_layout_sol(lay2, ret=True)
+        layout_3, P3, obj3 = self.load_layout_sol(lay3, ret=True)
+        layout_4, P4, obj4 = self.load_layout_sol(lay4, ret=True)
+        inf_data = self.load_infer_matrix(windcase, ret=True)
+
+        inf1 = np.zeros((self.axx,self.axy))
+        for node_i in layout_1:
+            xi, yi = self.grid[node_i]
+            inf1 += inf_data[node_i]
+            inf1[yi,xi] = inf1[yi,xi] - inf_data[node_i, yi,xi] 
+
+        inf2 = np.zeros((self.axx,self.axy))
+        for node_i in layout_2:
+            xi, yi = self.grid[node_i]
+            inf2 += inf_data[node_i]
+            inf2[yi,xi] = inf2[yi,xi] - inf_data[node_i, yi,xi]
+
+        inf3 = np.zeros((self.axx,self.axy))
+        for node_i in layout_3:
+            xi, yi = self.grid[node_i]
+            inf3 += inf_data[node_i]
+            inf3[yi,xi] = inf3[yi,xi] - inf_data[node_i, yi,xi]
+
+        inf4 = np.zeros((self.axx,self.axy))
+        for node_i in layout_4:
+            xi, yi = self.grid[node_i]
+            inf4 += inf_data[node_i]
+            inf4[yi,xi] = inf4[yi,xi] - inf_data[node_i, yi,xi]   
+
+        w1 = []
+        for node_i in layout_1:
+            xj,yj = self.grid[node_i]
+            w1.append(inf1[yj,xj])
+        w2 = []
+        for node_i in layout_2:
+            xj,yj = self.grid[node_i]
+            w2.append(inf2[yj,xj])
+        w3 = []
+        for node_i in layout_3:
+            xj,yj = self.grid[node_i]
+            w3.append(inf3[yj,xj])
+        w4 = []
+        for node_i in layout_4:
+            xj,yj = self.grid[node_i]
+            w4.append(inf4[yj,xj])
+
+        print(np.round(np.sum(P1 - w1),4), np.round(np.sum(P1 - w1)/obj1, 4), np.round(np.sum(P1 - w1)/obj4, 4))
+        print(np.round(np.sum(P2 - w2),4), np.round(np.sum(P2 - w2)/obj2, 4), np.round(np.sum(P2 - w2)/obj4, 4))
+        print(np.round(np.sum(P3 - w3),4), np.round(np.sum(P3 - w3)/obj3, 4), np.round(np.sum(P3 - w3)/obj4, 4))
+        print(np.round(np.sum(P4 - w4),4), np.round(np.sum(P4 - w4)/obj4, 4), np.round(np.sum(P4 - w4)/obj4, 4))    
+
+        temp = 0
+        for node_i in layout_1:
+            xi,yi = self.grid[node_i]
+            temp += self.geo_matrix[yi,xi]*20
+        print(temp, np.round(np.sum(P1 - w1),4), np.round(np.sum(P1 - w1),4)+temp)
+    # END EVAL_OBJ
    
-    def load_layout_sol(self, WindInd):
+    def load_layout_sol(self, WindInd, ret=False):
         """
         Initialize optimal layout from file
         """
         print("Load layout file ...")
-        filename = "wfl_sol_" + str(self.axx) + "_" + str(self.axy) + "_" + str(WindInd) + ".npy"
+        filename = "wfl_sol_dual_" + str(self.axx) + "_" + str(self.axy) + "_" + str(WindInd) + ".npy"
         try:
             with open(os.path.join(self.dir_sol,filename), "rb") as layout_file:
                 # the hole grid with 0 and 1
@@ -99,9 +159,13 @@ class wf_environment:
                 self.inf_sol = np.load(layout_file)
                 # objective value
                 self.layout_sol_obj = np.load(layout_file)
+                # 
+                self.layout_Pi = np.load(layout_file)
             print("Done!")
         except:
             print("No mathing file found!")
+        if ret:
+            return [self.layout_sol_indices, self.layout_Pi, self.layout_sol_obj]
     # END LOAD_LAYOUT_SOL
     
     def load_cable_sol(self):
@@ -115,12 +179,13 @@ class wf_environment:
                 self.cr_arcs0 = np.load(cr_file)
                 self.cr_arcs1 = np.load(cr_file)
                 self.cr_arcs2 = np.load(cr_file)
+                self.setV0 = np.load(cr_file)
             print("Done!")
         except:
             print("No matching file found!")
     # END LOAD_CABLE_SOL
 
-    def load_infer_matrix(self,WindInd):
+    def load_infer_matrix(self,WindInd,ret=False):
         print("Open interference file ...")
         try:
             filename = "interference_matrix_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.n) + "_" + str(WindInd) + ".npy"
@@ -129,6 +194,8 @@ class wf_environment:
             print("Done!")
         except:
             print("Failed!")
+        if ret:
+            return self.infer_matrix
     # END INIT_INTERFERENCE_MATRIX
 
     def load_dist_geo(self):
@@ -157,7 +224,7 @@ class wf_environment:
         """
         if which == "sol":
             for node_index in self.layout_sol_indices:  
-                ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=20, facecolor="white", edgecolor=col)
+                ax.scatter(self.grid[node_index][0], self.grid[node_index][1], s=100, facecolor="white", edgecolor=col)
         if which == "initial":
             for node_index in self.initial_sol:
                 # also adds a Dmin-diameter circle around this point to show forbidden zones
@@ -200,6 +267,15 @@ class wf_environment:
             dy = y1-y0
             plt.arrow(x0,y0,dx,dy, color="red")
     # END PLOT_ARCS
+
+    def plot_substations(self,ax):
+        """
+        plot helper functon for substations
+        """
+        for ss in self.setV0:
+            ax = plt.scatter(self.grid[ss][0],self.grid[ss][1], c='blue')
+        return ax
+    # END PLOT_SUBSTATIONS
 #
 #
 #
@@ -236,26 +312,23 @@ class layout_optimization(wf_environment):
         for i in range(self.v_wind.shape[0]):
             vi += self.v_wind[i]*(1/self.v_wind.shape[0])
         self.Pi = self.P(vi)
-        print(self.Pi)
     # END PI
 
     def init_wind_data(self,ind):
         if ind == 1:
             self.w_dirs = np.asarray([[-0.64278761, -0.766044443]], dtype=object)
-            self.v_wind = np.asarray([7.865316456])
+            self.v_wind = np.asarray([8])
         if ind == 3:
             self.w_dirs = np.asarray([[0.5, 0.8660254], [-1,0], [-0.5, -0.866025404]], dtype=object)
-            self.v_wind = np.asarray([6.11724, 7.5345, 8.1747967])
+            self.v_wind = np.asarray([8, 8, 8])
         if ind == 6:
             self.w_dirs = np.asarray([[0.866025404, 0.5], [0,1], [-0.866025404, 0.5], [-0.866025404, -0.5], [0,-1], [0.866025404, -0.5]], dtype=object)
-            self.v_wind = np.asarray([5.148139535, 6.491644205, 6.599352451, 8.062937794, 7.783281925, 8.700165563])
+            self.v_wind = np.asarray([8]*6)
         if ind == 12:
             self.w_dirs = np.asarray([[0.965925826, 0.258819045], [0.707106781,	0.707106781], [-0.258819045,	0.965925826], [-0.707106781,	0.707106781],
                             [-0.965925826,	0.258819045],  [-0.965925826,	-0.258819045], [-0.707106781,	-0.707106781], [-0.258819045,	-0.965925826], 
                             [0.258819045,	-0.965925826], [0.707106781,	-0.707106781], [0.965925826,	-0.258819045]], dtype=object) 
-            self.v_wind = np.asarray([4.963253012,5.264393939,5.687431694,6.885676037,
-                            6.451231527,6.790466102,7.970072993,8.132905591,7.557476636,
-                            8.035947712,9.142967885,7.389180328])
+            self.v_wind = np.asarray([8]*12)
     # END INIT_WIND_DATA
 
     def init_setE(self):
@@ -303,11 +376,10 @@ class layout_optimization(wf_environment):
         calculate some arbirtrary ground depth
         """
         print("Calculate geo matrix ...")
-        ppm_depth = 10
         x = np.arange(0,self.axx)
         y = np.arange(0,self.axy)
         xm, ym = np.meshgrid(x,y)
-        self.geo_matrix = (np.sin((xm)/5)-1)*ppm_depth
+        self.geo_matrix = (np.sin((xm)/5)-1)*10
         print("Done!")
     # END INIT_GEO_MATRIX
 
@@ -457,12 +529,13 @@ class layout_optimization(wf_environment):
         """
         Save solution of optimizaton method to file
         """
-        filename = "../solutions/wfl_sol_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.WindInd) +".npy"
+        filename = "../solutions/wfl_sol_dual_" + str(self.axx) + "_" + str(self.axy) + "_" + str(self.WindInd) +".npy"
         with open(os.path.join(self.dir_sol, filename), "wb") as sol_file:
             np.save(sol_file, self.sol)
             np.save(sol_file, self.sol_indices)
             np.save(sol_file, self.sol_inf)
             np.save(sol_file, self.sol_obj)
+            np.save(sol_file, self.Pi)
         print("Done!")
     # END SAVE_SOL
 
@@ -486,7 +559,7 @@ class cable_routing_optimization(wf_environment):
         super().__init__(axx,axy)
         
         # load sol file
-        self.load_layout_sol()
+        self.load_layout_sol(1)
         
         # setVT is the set of node indices from sol turbines
         self.setVT = self.layout_sol_indices
@@ -519,14 +592,6 @@ class cable_routing_optimization(wf_environment):
         node1 = self.grid[arc[1]]
         return self.dist(node0, node1)
     # END COST
-    
-    def plot_substations(self):
-        """
-        plot helper functon for substations
-        """
-        for ss in self.setV0:
-            plt.scatter(self.grid[ss][0],self.grid[ss][1], c='blue')
-    # END PLOT_SUBSTATIONS
 
     def save_sol(self):
         """
@@ -539,6 +604,7 @@ class cable_routing_optimization(wf_environment):
             np.save(cr_sol, self.sol_arcs0)
             np.save(cr_sol, self.sol_arcs1)
             np.save(cr_sol, self.sol_arcs2)
+            np.save(cr_sol, self.setV0)
         print("Done!")
     # END SAVE_SOL
 
